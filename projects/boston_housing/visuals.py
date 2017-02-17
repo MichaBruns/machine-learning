@@ -27,6 +27,9 @@ def ModelLearning(X, y):
 
     # Create the figure window
     fig = pl.figure(figsize=(10,7))
+    
+    listTest_scores=[]
+    listTrain_scores=[]
 
     # Create three different models based on max_depth
     for k, depth in enumerate([1,3,6,10]):
@@ -53,6 +56,9 @@ def ModelLearning(X, y):
         ax.fill_between(sizes, test_mean - test_std, \
             test_mean + test_std, alpha = 0.15, color = 'g')
         
+        listTrain_scores.append(train_scores)
+        listTest_scores.append(test_scores)
+        
         # Labels
         ax.set_title('max_depth = %s'%(depth))
         ax.set_xlabel('Number of Training Points')
@@ -65,6 +71,8 @@ def ModelLearning(X, y):
     fig.suptitle('Decision Tree Regressor Learning Performances', fontsize = 16, y = 1.03)
     fig.tight_layout()
     fig.show()
+    
+    return listTrain_scores, listTest_scores
 
 
 def ModelComplexity(X, y):
