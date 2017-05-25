@@ -137,7 +137,9 @@ class LearningAgent(Agent):
                 action = random.choice(self.valid_actions)
 
         else:
-            action = max(self.Q[state], key=self.Q[state].get)
+            maxQ = self.get_maxQ(state)
+            actions = [act for act in self.Q[state] if self.Q[state][act] == maxQ]
+            action = random.choice(actions)
 
         if action not in self.Q[state]:
             self.numExploredStates += 1

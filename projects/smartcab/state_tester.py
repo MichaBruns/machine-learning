@@ -95,6 +95,10 @@ for state in itertools.product( validWaypoints, lights, otherTraffic, otherTraff
             if optimalAction not in agent.Q[state]:
                 numBadActionsNotFinished += 1
 
+            if len(agent.Q[state]) == 4:
+                print "Not Optimal Q Values "
+                print agent.Q[state]
+
 
 print "Number of bad actions: ", numBadActions
 print numBadActionsNotFinished, " of them couldn't have been chosen"
