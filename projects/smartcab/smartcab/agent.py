@@ -8,7 +8,7 @@ class LearningAgent(Agent):
     """ An agent that learns to drive in the Smartcab world.
         This is the object you will be modifying. """ 
 
-    def __init__(self, env, learning=False, exploreAllStates = False, epsilon=1.0, alpha=0.5):
+    def __init__(self, env, learning=False, strategy= None, completeStates = False, epsilon=1.0, alpha=0.5):
         super(LearningAgent, self).__init__(env)     # Set the agent in the evironment 
         self.planner = RoutePlanner(self.env, self)  # Create a route planner
         self.valid_actions = self.env.valid_actions  # The set of valid actions
@@ -23,9 +23,12 @@ class LearningAgent(Agent):
         ## TO DO ##
         ###########
         # Set any additional class parameters as needed
-        self.numStates = 4 * 2 * 4 * 4 * 4 * 4
+        self.numStates = 3 * 2 * 4 * 4 * 4 * 4
         self.numExploredStates = 0
-        self.exploreAllStates = exploreAllStates
+        self.strategy = strategy
+        self.completeStates = completeStates
+        self.trialNumber = 0
+        self.statesFile = open('visitedStates.csv', 'w')
 
     def reset(self, destination=None, testing=False):
         """ The reset function is called at the beginning of each trial.
@@ -45,11 +48,13 @@ class LearningAgent(Agent):
         if(testing):
             self.epsilon = 0
             self.alpha = 0
-        #elif self.numExploredStates >= self.numStates:
-        #    self.epsilon = 0
         else:
-            self.epsilon -= 0.0001
+            self.trialNumber +=1
+            #self.epsilon = 0.99**self.trialNumber
+            self.epsilon -= 0.001
 
+        self.statesFile.write(str(self.trialNumber) + ";" + str(self.numExploredStates)+"\n")
+        print "-------- Explored States: ", self.numExploredStates, " / ", self.numStates, "--------------\n"
         return None
 
     def build_state(self):
@@ -65,8 +70,11 @@ class LearningAgent(Agent):
         ########### 
         ## TO DO ##
         ###########
-        # Set 'state' as a tuple of relevant data for the agent        
-        state = (waypoint, inputs['light'], inputs['oncoming'], inputs['right'], inputs['left'])
+        # Set 'state' as a tuple of relevant data for the agent
+        if self.completeStates:
+            state = (waypoint, inputs['light'], inputs['oncoming'], inputs['left'], inputs['right'])
+        else:
+            state = (waypoint, inputs['light'])
 
         return state
 
@@ -95,11 +103,10 @@ class LearningAgent(Agent):
         # If it is not, create a new dictionary for that state
         #   Then, for each action available, set the initial Q-value to 0.0
         if state not in self.Q:
-            newEntry = dict()
-            for action in self.valid_actions:
-                newEntry[action] = 0.0
-
-            self.Q[state] = newEntry
+            #newEntry = dict()
+            #for action in self.valid_actions:
+            #    newEntry[action] = 0.0
+            self.Q[state] = {}
 
         return
 
@@ -120,20 +127,48 @@ class LearningAgent(Agent):
         # When learning, choose a random action with 'epsilon' probability
         #   Otherwise, choose an action with the highest Q-value for the current state
 
-        # test all actions
-        if self.exploreAllStates==True and self.numExploredStates < self.numStates:
-            if state in self.Q and self.epsilon > 0.1:
+        if random.uniform(0, 1) < self.epsilon or len(self.Q[state]) == 0:
+            if self.strategy == 'Exhaustive':
                 for act in self.valid_actions:
-                   if self.Q[state][act] == 0:
-                        self.numExploredStates+=1
-                        print "Explored States: ", self.numExploredStates, " / ", self.numStates, "\n"
-                        return act;
+                    if act not in self.Q[state]:
+                        action = act
+                        break
+            else:
+                action = random.choice(self.valid_actions)
 
-        if random.uniform(0, 1) < self.epsilon:
-            action = random.choice(self.valid_actions)
         else:
             action = max(self.Q[state], key=self.Q[state].get)
-        
+
+        if action not in self.Q[state]:
+            self.numExploredStates += 1
+
+        return action
+
+    def choose_optimal_action(self, state):
+        """ The choose_action function is called when the agent is asked to choose
+            which action to take, based on the 'state' the smartcab is in. """
+
+        # Set the agent state and default action
+        self.state = state
+        self.next_waypoint = self.planner.next_waypoint()
+        action = None
+
+        if state[1] == 'red':
+            if self.next_waypoint == 'right':
+                # turning on red light is allowed
+                if state[3] != 'forward':
+                    action = self.next_waypoint
+        else:
+            if self.next_waypoint == 'forward':
+                action = self.next_waypoint
+            if self.next_waypoint == 'left':
+                if (state[2] == None or state[2] == 'left'):
+                    action =  self.next_waypoint
+                else:
+                    action = 'forward'
+            elif self.next_waypoint == 'right':
+                action =  self.next_waypoint
+
         return action
 
 
@@ -150,7 +185,10 @@ class LearningAgent(Agent):
         #current_state = self.build_state()  # Get current state
         #self.createQ(current_state)
 
-        self.Q[state][action] = (1-self.alpha) * self.Q[state][action] + self.alpha * (reward) # + self.get_maxQ(state))
+        if action in self.Q[state]:
+            self.Q[state][action] = (1-self.alpha) * self.Q[state][action] + self.alpha * (reward) # + self.get_maxQ(state))
+        else:
+            self.Q[state][action] = reward
 
 
         return
@@ -163,7 +201,11 @@ class LearningAgent(Agent):
 
         state = self.build_state()          # Get current state
         self.createQ(state)                 # Create 'state' in Q-table
-        action = self.choose_action(state)  # Choose an action
+
+        if  self.strategy == 'Optimal':
+            action = self.choose_optimal_action(state)  # Choose an action
+        else:
+            action = self.choose_action(state)  # Choose an action
         reward = self.env.act(self, action) # Receive a reward
         self.learn(state, action, reward)   # Q-learn
 
@@ -188,7 +230,7 @@ def run():
     #   learning   - set to True to force the driving agent to use Q-learning
     #    * epsilon - continuous value for the exploration factor, default is 1
     #    * alpha   - continuous value for the learning rate, default is 0.5
-    agent = env.create_agent(LearningAgent, learning=True, exploreAllStates=True, alpha=1)
+    agent = env.create_agent(LearningAgent, completeStates = True, strategy = None, learning=True, alpha=0.5)
     
     ##############
     # Follow the driving agent
@@ -203,14 +245,14 @@ def run():
     #   display      - set to False to disable the GUI if PyGame is enabled
     #   log_metrics  - set to True to log trial and simulation results to /logs
     #   optimized    - set to True to change the default log file name
-    sim = Simulator(env, display=False, update_delay=0.0001, log_metrics=True)
+    sim = Simulator(env, update_delay=0, log_metrics=True, display=False, optimized=True)
     
     ##############
     # Run the simulator
     # Flags:
     #   tolerance  - epsilon tolerance before beginning testing, default is 0.05 
     #   n_test     - discrete number of testing trials to perform, default is 0
-    sim.run(n_test=10)
+    sim.run(n_test=20)
 
 
 if __name__ == '__main__':
